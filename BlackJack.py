@@ -23,7 +23,6 @@ def deal_hands(deck_pointer, dealer_hand, player_hand, DECK):
         deck_pointer+=1
         player_hand.append(DECK[deck_pointer])
         deck_pointer+=1
-    print(dealer_hand)
     return deck_pointer
 
 def sum_hand(hand):
@@ -43,24 +42,25 @@ def sum_hand(hand):
 
 def check_win(hand):
     if hand == 21:
-        return '1' #win state
+        return 1 #win state
     if hand > 21:
-        return '-1' #loss state
+        return -1 #loss state
     else:
-        return '0' #continue state
+        return 0 #continue state
 
 
 def play(deck_pointer, dealer_hand, player_hand, DECK):
     winner=False
-    deal_hands(deck_pointer, dealer_hand, player_hand, DECK)
+    deck_pointer = deal_hands(deck_pointer, dealer_hand, player_hand, DECK)
+    print('Dealer Hand: ' + str(dealer_hand) + ' Value: ' + str(sum_hand(dealer_hand)))
+    print('Player Hand: ' + str(player_hand) + ' Value: ' + str(sum_hand(player_hand)))
 
     #TO DO: Check if either player wins after first deal
 
     while not winner:
+        print('Discard Pile: ' + str(deck_pointer))
         dealer_val=sum_hand(dealer_hand)
         player_val=sum_hand(player_hand)
-        print('Dealer Hand: ' + str(dealer_hand) + ' Value: ' + str(dealer_val))
-        print('Player Hand: ' + str(player_hand) + ' Value: ' + str(player_val))
         turn_start = deck_pointer
         if dealer_val < 17:
             dealer_hand.append(DECK[deck_pointer])
@@ -69,28 +69,30 @@ def play(deck_pointer, dealer_hand, player_hand, DECK):
         if player_input == 'h':
             player_hand.append(DECK[deck_pointer])
             deck_pointer+=1
+        
         dealer_state = check_win(sum_hand(dealer_hand))
         player_state = check_win(sum_hand(player_hand))
-        print(dealer_state, player_state)
+        print('Dealer Hand: ' + str(dealer_hand) + ' Value: ' + str(sum_hand(dealer_hand)))
+        print('Player Hand: ' + str(player_hand) + ' Value: ' + str(sum_hand(player_hand)))
 
         if dealer_state == 1 and player_state==1:
             print('both win')
-            return 1
+            return [deck_pointer, 1, 0]
         if dealer_state == 1 or player_state==-1:
             print('dealer wins')
-            return 0
+            return [deck_pointer, 0, 1]
         if player_state == 1 or dealer_state==-1:
-            print('player')
-            return 1
+            print('player wins')
+            return [deck_pointer, 1, 0]
         
 
 
         if turn_start == deck_pointer:
             #if neither party hit this turn, end the turn and determine winner
             if sum_hand(dealer_hand) > sum_hand(player_hand):
-                return 0
+                return [deck_pointer, 0, 1]
             else:
-                return 1
+                return [deck_pointer, 1, 0]
 
         
 
@@ -102,16 +104,19 @@ def main():
     'hA','h2','h3','h4','h5','h6','h7','h8','h9','h10','hJ','hQ','hK',
     'dA','d2','d3','d4','d5','d6','d7','d8','d9','d10','dJ','dQ','dK']
     random.shuffle(DECK)
-    print(DECK)
+    #print(DECK)
     deck_pointer = 0
     #main game loop of 6 rounds
     wins = 0
+    losses = 0
     for i in range(6):
         dealer_hand=[]
         player_hand=[]
-        print(deck_pointer)
-        wins+=play(deck_pointer, dealer_hand, player_hand, DECK)
-        print('wins: ' + str(wins))
+        results = play(deck_pointer, dealer_hand, player_hand, DECK)
+        deck_pointer = results[0]
+        wins += results[1]
+        losses += results[2]
+        print('wins: ' + str(wins) + ' losses: ' + str(losses))
 
 main()
 

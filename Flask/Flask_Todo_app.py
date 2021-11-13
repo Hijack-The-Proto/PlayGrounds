@@ -1,3 +1,8 @@
+'''
+This app was created by following the tutorial at https://www.youtube.com/watch?v=Z1RJmh_OqeA&t=2510s by freeCodeCamp.org
+'''
+
+
 from flask import Flask, render_template, url_for, request, redirect
 from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime

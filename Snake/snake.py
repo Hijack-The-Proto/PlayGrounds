@@ -28,10 +28,9 @@ class Food(object):
         self.color = (255, 0, 0)
         self.randomize_position([(0,0)])
 
-    def randomize_position(self, snake):  # FIX ME: pass in a list of locations that snake is not in. 
-        self.position = (random.randint(0, GRID_WIDTH-1) * GRIDSIZE, random.randint(0, GRID_HEIGHT-1) * GRIDSIZE)
-        while self.position in snake: #this ensures that we dont put a food inside a spot ocupied by snake. this could be very slow though when snake takes up most of the board.
-            self.position = (random.randint(0, GRID_WIDTH-1) * GRIDSIZE, random.randint(0, GRID_HEIGHT-1) * GRIDSIZE)
+    def randomize_position(self, snake): 
+        tmp = [elem for elem in GRID if elem not in snake]
+        self.position = random.choice(tmp)
 
     def draw(self, surface):
         r = pygame.Rect((self.position[0]+1, self.position[1]+1), (GRIDSIZE-2, GRIDSIZE-2))
@@ -47,6 +46,7 @@ class Snake(object):
         self.new_direction = self.direction
         self.color = (0, 128, 0)
         self.initial_snake_speed = 20 # larger is slower
+        self.max_length = 560
 
     def get_head_position(self):
         return self.positions[0]
@@ -72,7 +72,7 @@ class Snake(object):
                 self.rotation.pop()
     def reset(self):
         self.length = 1
-        self.positions = [((SCREEN_WIDTH / 2), (SCREEN_HEIGHT / 2))]
+        self.positions = [random.choice(GRID)]
         self.rotation = [(0,0)]
         self.direction = random.choice([UP, DOWN, LEFT, RIGHT])
 
@@ -149,8 +149,8 @@ def searchAlgo(snake, args):
     return snake
 
 def generateGridCoordinates(): #generates all coordinate points on the grid board, this is used to generate the starting point. 
-    for i in range(GRIDSIZE):
-        for j in range(GRIDSIZE):
+    for i in range(int(GRID_WIDTH)):
+        for j in range(int(GRID_HEIGHT)):
             GRID.append((i*GRIDSIZE,j*GRIDSIZE))
 
 
@@ -191,7 +191,7 @@ def main():
             searchAlgo(snake, args)
 
             snake.move()
-            print(snake.positions)
+            #print(snake.positions)
             time_elapsed = 0
             if snake.length ==1: #A very brute force way to reset the scoreboard after death. 
                 score_board.score = 0 
@@ -199,7 +199,8 @@ def main():
 
 
         if snake.get_head_position() == food.position:
-            snake.length+=1
+            if snake.length < snake.max_length:
+                snake.length+=1
             score_board.score+=1
             food.randomize_position(snake.positions)
             snake_speed = math.ceil(snake_speed * 0.99)

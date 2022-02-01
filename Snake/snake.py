@@ -2,6 +2,7 @@ import pygame
 import sys
 import random
 import math
+import argparse
 
 
 #Global Variables
@@ -19,10 +20,12 @@ RIGHT = (1,0)
 
 FPS = 60
 
+GRID = []
+
 class Food(object):
     def __init__(self):
         self.position = (0,0)
-        self.color = (223, 163, 49)
+        self.color = (255, 0, 0)
         self.randomize_position([(0,0)])
 
     def randomize_position(self, snake):  # FIX ME: pass in a list of locations that snake is not in. 
@@ -31,19 +34,19 @@ class Food(object):
             self.position = (random.randint(0, GRID_WIDTH-1) * GRIDSIZE, random.randint(0, GRID_HEIGHT-1) * GRIDSIZE)
 
     def draw(self, surface):
-        r = pygame.Rect((self.position[0], self.position[1]), (GRIDSIZE, GRIDSIZE))
+        r = pygame.Rect((self.position[0]+1, self.position[1]+1), (GRIDSIZE-2, GRIDSIZE-2))
         pygame.draw.rect(surface, self.color, r)
-        pygame.draw.rect(surface, (93,216, 228), r, 1)
 
 
 class Snake(object):
     def __init__(self):
         self.length = 1
-        self.positions = [((SCREEN_WIDTH / 2), (SCREEN_HEIGHT / 2))]
+        self.positions = [random.choice(GRID)]
         self.direction = random.choice([UP, DOWN, LEFT, RIGHT])
+        self.rotation = [(0,0)]
         self.new_direction = self.direction
-        self.color = (17, 24, 47)
-        self.initial_snake_speed = 250 # larger is slower
+        self.color = (0, 128, 0)
+        self.initial_snake_speed = 20 # larger is slower
 
     def get_head_position(self):
         return self.positions[0]
@@ -58,23 +61,28 @@ class Snake(object):
         current = self.get_head_position()
         x, y = self.new_direction
         self.direction = self.new_direction
-        new = (((current[0] + (x*GRIDSIZE)) % SCREEN_WIDTH), (current[1] + (y*GRIDSIZE)) % SCREEN_HEIGHT)
-        if len(self.positions) > 2 and new in self.positions[2:]:
+        new_head_position = (((current[0] + (x*GRIDSIZE)) % SCREEN_WIDTH), (current[1] + (y*GRIDSIZE)) % SCREEN_HEIGHT)
+        if len(self.positions) > 2 and new_head_position in self.positions[2:]:
             self.reset()
         else:
-            self.positions.insert(0, new)
+            self.positions.insert(0, new_head_position)
+            self.rotation.insert(0, self.direction)
             if len(self.positions) > self.length:
                 self.positions.pop()
+                self.rotation.pop()
     def reset(self):
         self.length = 1
         self.positions = [((SCREEN_WIDTH / 2), (SCREEN_HEIGHT / 2))]
+        self.rotation = [(0,0)]
         self.direction = random.choice([UP, DOWN, LEFT, RIGHT])
 
 
-    def draw(self, surface):
-        for p in self.positions:
-            r = pygame.Rect((p[0]+1, p[1]+1), (GRIDSIZE-2, GRIDSIZE-2))
+    def draw(self, surface): #We create two rectangles, one representing the body position, and one lagging behind by 5 pixels to fill the gaps in the snake body. this is visually more appealing. 
+        for p in range(len(self.positions)):
+            r = pygame.Rect((self.positions[p][0]+1, self.positions[p][1]+1), (GRIDSIZE-2, GRIDSIZE-2))
+            r_lag = pygame.Rect((self.positions[p][0]+1+((self.rotation[p][0]*-1)*5), self.positions[p][1]+1+((self.rotation[p][1]*-1)*5)), (GRIDSIZE-2, GRIDSIZE-2))
             pygame.draw.rect(surface, self.color, r)
+            pygame.draw.rect(surface, self.color, r_lag)
             #pygame.draw.rect(surface, (93,216,228), r, 1)
         
     def handle_keys(self):
@@ -96,19 +104,62 @@ class Score(object):
     def __init__(self):
         self.score = 0
 
-def drawGrid(surface):
+def drawGrid(surface): #draws a grip pattern on the background to help visualize the snakes rows and colemns 
     for y in range(0, int(GRID_HEIGHT)):
         for x in range(0, int(GRID_WIDTH)):
             if (x+y) % 2 == 0:
                 r = pygame.Rect((x*GRIDSIZE, y*GRIDSIZE), (GRIDSIZE, GRIDSIZE))
-                pygame.draw.rect(surface, (93, 216, 228), r)
+                pygame.draw.rect(surface, (66, 66, 66), r)
             else:
                 rr = pygame.Rect((x*GRIDSIZE, y*GRIDSIZE), (GRIDSIZE, GRIDSIZE))
-                pygame.draw.rect(surface, (84, 194, 205), rr)
+                pygame.draw.rect(surface, (104, 104, 104), rr)
 
+def create_argument_parser():
+    parser = argparse.ArgumentParser(description='Snake Game. Choose what Algorythem you would like to use, or choose nothing to play Snake yourself.')
+    parser.add_argument('--brute-force', help='Solves snake using a brute force approach', action='store_true', dest='bruteForce', default=False)
+    return parser
+
+def bruteForceSearch(snake):
+    snake_head = snake.get_head_position()
+    #Using some hard coding of edges, will fix later using the GRIDSIZE global variables
+
+    #This segment takes care of the base cases of movment. the snake shoudl zigzag down the screen while keeping the farthest left column open
+    if 460 == snake_head[0] and snake.direction != DOWN: #Checking snake.direction lets us know what our last move was, eleminating the need for any vairables to be passed to this function
+        snake.turn(DOWN)
+    elif snake_head[0] > 20 and snake.direction != RIGHT:
+        snake.turn(LEFT)
+    if 20 == snake_head[0] and snake.direction != DOWN and snake_head[1] != 0.0: #This if check needed to ignore going down when the snake reached to top and turned right to begin the loop
+        snake.turn(DOWN)
+    elif 1 < snake_head[0] < 460 and snake.direction != LEFT: # the 1 < here is to let the loop ignore any movement in the 0 column while the snake returns to the top of the board.
+        snake.turn(RIGHT)
+
+    #These dictate the loop the snake takes. when the snake reaches the lewest left point in its zig zag, regardless of what row it started on, 
+    #it will turn left to begin going up to restart the loop. 
+    if (20.0, 460.0) == snake_head:
+        snake.turn(LEFT)
+    elif (0.0, 460.0) == snake_head:
+        snake.turn(UP)
+    elif (0.0, 0.0) == snake_head:
+        snake.turn(RIGHT)
+    return snake 
+
+def searchAlgo(snake, args):
+    if args.bruteForce:
+        bruteForceSearch(snake)
+    return snake
+
+def generateGridCoordinates(): #generates all coordinate points on the grid board, this is used to generate the starting point. 
+    for i in range(GRIDSIZE):
+        for j in range(GRIDSIZE):
+            GRID.append((i*GRIDSIZE,j*GRIDSIZE))
 
 
 def main():
+    parser = create_argument_parser()
+    args = parser.parse_args()
+    print(args)
+    generateGridCoordinates() 
+
 
     pygame.init()
 
@@ -117,7 +168,8 @@ def main():
 
     surface = pygame.Surface(screen.get_size())
     surface = surface.convert()
-    drawGrid(surface)
+    #drawGrid(surface)
+    surface.fill((45,45,45))
 
     snake = Snake()
     food = Food()
@@ -130,13 +182,16 @@ def main():
     while True:
         time = clock.tick(FPS)
         snake.handle_keys()
-        drawGrid(surface)
-
-        print(snake.positions)
+        #drawGrid(surface)
+        surface.fill((45,45,45))
 
         time_elapsed += time
         if time_elapsed > snake_speed: #Set the pace that the snake moves at so that it can be sped up as the game prgresses
+            
+            searchAlgo(snake, args)
+
             snake.move()
+            print(snake.positions)
             time_elapsed = 0
             if snake.length ==1: #A very brute force way to reset the scoreboard after death. 
                 score_board.score = 0 
@@ -153,7 +208,7 @@ def main():
         food.draw(surface)
 
         screen.blit(surface, (0,0))
-        text = myfont.render('Score {0} '.format(score_board.score), 1, (0,0,0))
+        text = myfont.render('Score {0} '.format(score_board.score), 1, (255,255,255))
         screen.blit(text, (5, 10))
         pygame.display.update()
 

@@ -1,2 +1,2 @@
 # PlayGrounds
-My personal repository for tool and learning
+My personal repository for tools and learning

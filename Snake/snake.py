@@ -1,6 +1,7 @@
 from __future__ import annotations
 import pygame
 import sys
+import time
 import random
 import math
 import argparse
@@ -85,21 +86,24 @@ class Food(object):
 
 class Snake(object):
     def __init__(self):
-        self.length = 1
+        self.length = 2
         self.positions = [random.choice(GRID)]
         self.direction = random.choice([UP, DOWN, LEFT, RIGHT])
         self.rotation = [(0,0)]
         self.new_direction = self.direction
         self.color = (0, 128, 0)
-        self.initial_snake_speed = 200 # larger is slower
+        self.initial_snake_speed = 250 # larger is slower
         self.snake_speed = self.initial_snake_speed
         self.max_length = 560 #FIX ME: make this variable depending on the amount of spaces on the board at the start of the game. 
+
+        self.head = (int(self.positions[0][0]/GRIDSIZE), int(self.positions[0][1]/GRIDSIZE))
+        self.body = [self.head]
 
     def get_head_position(self):
         return self.positions[0]
 
     def turn(self, point):
-        if (point[0] * -1, point[1] * -1) == self.direction:
+        if (point[0] * -1, point[1] * -1) == self.direction and self.length != 1:
             return
         else:
             self.new_direction = point
@@ -133,6 +137,13 @@ class Snake(object):
             pygame.draw.rect(surface, self.color, r)
             pygame.draw.rect(surface, self.color, r_lag)
             #pygame.draw.rect(surface, (93,216,228), r, 1)
+    
+    def convert_nums(self):
+        self.head = (int(self.positions[0][0]/GRIDSIZE), int(self.positions[0][1]/GRIDSIZE))
+        self.body = []
+        for elm in self.positions:
+            x, y = int(elm[0]/GRIDSIZE), int(elm[1]/GRIDSIZE)
+            self.body.append((x, y))
         
     def handle_keys(self):
         for event in pygame.event.get():
@@ -148,6 +159,18 @@ class Snake(object):
                     self.turn(LEFT)
                 elif event.key == pygame.K_RIGHT:
                     self.turn(RIGHT)
+
+class Score(object):
+    def __init__(self):
+        self.score = 0
+
+def bfs_move(path, snake, score_board):
+    print(path)
+    move = path[0]
+    path.pop(0)
+    snake.turn(move)
+    snake.move(score_board)
+    return
 
 def breadth_first_search(graph: Graph, start: LOCATION, goal: LOCATION):
     frontier = Queue()
@@ -165,7 +188,8 @@ def breadth_first_search(graph: Graph, start: LOCATION, goal: LOCATION):
             if next not in came_from:
                 frontier.put(next)
                 came_from[next] = current
-    
+    print('\ncame_from dump: \n')
+    print(came_from)
     return came_from
 
 def reconstruct_path(came_from: Dict[LOCATION, LOCATION], start: LOCATION, goal: LOCATION) -> List[LOCATION]:
@@ -173,36 +197,49 @@ def reconstruct_path(came_from: Dict[LOCATION, LOCATION], start: LOCATION, goal:
     current: LOCATION = goal
     path: List[LOCATION] = []
     while current != start: # note: this will fail if no path found
-        path.append(current)
-        current = came_from[current]
+        try:
+            print(current)
+            path.append(current)
+            current = came_from[current]
+        except:
+            print('ERROR')
+            return 'bad'
     path.append(start) # optional
     path.reverse() # optional
+    print('\npath dump: \n')
+    print(path)
     return path
 
 def convertToMovement(path):
+    if path == 'bad':
+        return path
     moves = []
     start = path[0]
 
     for i in range(1, len(path), 1):
-        if path[i] == (start[0]+UP[1], start[1]+UP[0]):
-            moves.append('UP')
+        if path[i] == (start[0]+UP[0], start[1]+UP[1]):
+            moves.append(UP)
             start = path[i]
-        elif path[i] == (start[0]+DOWN[1], start[1]+DOWN[0]):
-            moves.append('DOWN')
+        elif path[i] == (start[0]+DOWN[0], start[1]+DOWN[1]):
+            moves.append(DOWN)
             start = path[i]
-        elif path[i] == (start[0]+RIGHT[1], start[1]+RIGHT[0]):
-            moves.append('RIGHT')
+        elif path[i] == (start[0]+RIGHT[0], start[1]+RIGHT[1]):
+            moves.append(RIGHT)
             start = path[i]
-        elif path[i] == (start[0]+LEFT[1], start[1]+LEFT[0]):
-            moves.append('LEFT')
+        elif path[i] == (start[0]+LEFT[0], start[1]+LEFT[1]):
+            moves.append(LEFT)
             start = path[i]
 
 
     return moves
 
-class Score(object):
-    def __init__(self):
-        self.score = 0
+def generate_bfs_moves(food, board, snake):
+    snake.convert_nums()
+    food_location = (int(food.position[0]/GRIDSIZE), int(food.position[1]/GRIDSIZE))
+    board.walls = snake.body
+    print('Food Location: {0} snake head {1}'.format(food_location, snake.head))
+    path = convertToMovement(reconstruct_path(breadth_first_search(board, snake.head, food_location), snake.head, food_location))
+    return path
 
 def drawGrid(surface): #draws a grip pattern on the background to help visualize the snakes rows and colemns 
     for y in range(0, int(GRID_HEIGHT)):
@@ -217,7 +254,7 @@ def drawGrid(surface): #draws a grip pattern on the background to help visualize
 def create_argument_parser():
     parser = argparse.ArgumentParser(description='Snake Game. Choose what Algorythem you would like to use, or choose nothing to play Snake yourself.')
     parser.add_argument('--brute-force', help='Solves snake using a brute force approach', action='store_true', dest='bruteForce', default=False)
-    parser.add_argument('--BFS', help='Trys to solve snake by using a Bredth First Search approach', action='store_true', dest='bfs_search', default=False)
+    parser.add_argument('--bfs', help='Trys to solve snake by using a Bredth First Search approach', action='store_true', dest='bfs_search', default=False)
     return parser
 
 def bruteForceSearch(snake):
@@ -244,13 +281,6 @@ def bruteForceSearch(snake):
         snake.turn(RIGHT)
     return snake 
 
-def searchAlgo(food, snake, args): #I need a guard in here against multiple seach algo flags being called
-    if args.bruteForce:
-        bruteForceSearch(snake)
-    if args.bfs_search:
-        breadth_first_search(snake, food)
-    return snake
-
 def generateGridCoordinates(): #generates all coordinate points on the grid board, this is used to generate the starting point. 
     for i in range(int(GRID_WIDTH)):
         for j in range(int(GRID_HEIGHT)):
@@ -273,23 +303,29 @@ def main():
     snake = Snake()
     food = Food()
     score_board = Score()
+    board = SquareGrid(int(GRID_WIDTH), int(GRID_HEIGHT))
 
     myfont = pygame.font.SysFont("monospace", 16)
 
     time_elapsed = 0
+
+    if args.bfs_search: # finds the initial path for bfs
+        MOVE_QUEUE = generate_bfs_moves(food, board, snake)
+
     while True:
-        time = clock.tick(FPS)
+        game_time = clock.tick(FPS)
         snake.handle_keys()
-        #drawGrid(surface)
         surface.fill((45,45,45))
 
-        time_elapsed += time
+        time_elapsed += game_time
         if time_elapsed > snake.snake_speed: #Set the pace that the snake moves at so that it can be sped up as the game prgresses
             
-            searchAlgo(food, snake, args)
-
-            snake.move(score_board)
-            #print(snake.positions)
+            if args.bruteForce:
+                bruteForceSearch(snake)
+            elif args.bfs_search:
+                bfs_move(MOVE_QUEUE, snake, score_board)
+            else:
+                snake.move(score_board)
             time_elapsed = 0
 
 
@@ -299,9 +335,20 @@ def main():
             score_board.score+=1
             food.randomize_position(snake.positions)
             snake.snake_speed = math.ceil(snake.snake_speed * 0.99)
+            if args.bfs_search:
+                MOVE_QUEUE = generate_bfs_moves(food, board, snake)
 
         snake.draw(surface)
         food.draw(surface)
+        if MOVE_QUEUE == 'bad':
+            screen.blit(surface, (0,0))
+            error_text = myfont.render('ERROR: NO PATH AVAILABLE', 1, (255,255,255))
+            screen.blit(error_text, (5, 10))
+            pygame.display.update()
+            time.sleep(10)
+            snake.reset(score_board)
+            MOVE_QUEUE = generate_bfs_moves(food, board, snake)
+
 
         screen.blit(surface, (0,0))
         text = myfont.render('Score {0} {1}'.format(score_board.score, snake.snake_speed), 1, (255,255,255))

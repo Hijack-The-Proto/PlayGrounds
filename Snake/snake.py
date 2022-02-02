@@ -86,7 +86,7 @@ class Food(object):
 
 class Snake(object):
     def __init__(self):
-        self.length = 2
+        self.length = 1
         self.positions = [random.choice(GRID)]
         self.direction = random.choice([UP, DOWN, LEFT, RIGHT])
         self.rotation = [(0,0)]
@@ -323,6 +323,8 @@ def main():
             if args.bruteForce:
                 bruteForceSearch(snake)
             elif args.bfs_search:
+                if not MOVE_QUEUE:
+                    MOVE_QUEUE = generate_bfs_moves(food, board, snake)
                 bfs_move(MOVE_QUEUE, snake, score_board)
             else:
                 snake.move(score_board)

@@ -45,8 +45,9 @@ class Snake(object):
         self.rotation = [(0,0)]
         self.new_direction = self.direction
         self.color = (0, 128, 0)
-        self.initial_snake_speed = 20 # larger is slower
-        self.max_length = 560
+        self.initial_snake_speed = 200 # larger is slower
+        self.snake_speed = self.initial_snake_speed
+        self.max_length = 560 #FIX ME: make this variable depending on the amount of spaces on the board at the start of the game. 
 
     def get_head_position(self):
         return self.positions[0]
@@ -57,21 +58,23 @@ class Snake(object):
         else:
             self.new_direction = point
 
-    def move(self):
+    def move(self, score_board):
         current = self.get_head_position()
         x, y = self.new_direction
         self.direction = self.new_direction
         new_head_position = (((current[0] + (x*GRIDSIZE)) % SCREEN_WIDTH), (current[1] + (y*GRIDSIZE)) % SCREEN_HEIGHT)
         if len(self.positions) > 2 and new_head_position in self.positions[2:]:
-            self.reset()
+            self.reset(score_board)
         else:
             self.positions.insert(0, new_head_position)
             self.rotation.insert(0, self.direction)
             if len(self.positions) > self.length:
                 self.positions.pop()
                 self.rotation.pop()
-    def reset(self):
+    def reset(self, score_board):
         self.length = 1
+        score_board.score = 0
+        self.snake_speed = self.initial_snake_speed
         self.positions = [random.choice(GRID)]
         self.rotation = [(0,0)]
         self.direction = random.choice([UP, DOWN, LEFT, RIGHT])
@@ -117,6 +120,7 @@ def drawGrid(surface): #draws a grip pattern on the background to help visualize
 def create_argument_parser():
     parser = argparse.ArgumentParser(description='Snake Game. Choose what Algorythem you would like to use, or choose nothing to play Snake yourself.')
     parser.add_argument('--brute-force', help='Solves snake using a brute force approach', action='store_true', dest='bruteForce', default=False)
+    parser.add_argument('--BFS', help='Trys to solve snake by using a Bredth First Search approach', action='store_true', dest='bfs_search', default=False)
     return parser
 
 def bruteForceSearch(snake):
@@ -143,9 +147,15 @@ def bruteForceSearch(snake):
         snake.turn(RIGHT)
     return snake 
 
-def searchAlgo(snake, args):
+def bfs(snake, food):
+
+    return
+
+def searchAlgo(food, snake, args): #I need a guard in here against multiple seach algo flags being called
     if args.bruteForce:
         bruteForceSearch(snake)
+    if args.bfs_search:
+        bfs(snake, food)
     return snake
 
 def generateGridCoordinates(): #generates all coordinate points on the grid board, this is used to generate the starting point. 
@@ -157,10 +167,7 @@ def generateGridCoordinates(): #generates all coordinate points on the grid boar
 def main():
     parser = create_argument_parser()
     args = parser.parse_args()
-    print(args)
     generateGridCoordinates() 
-
-
     pygame.init()
 
     clock = pygame.time.Clock()
@@ -168,7 +175,6 @@ def main():
 
     surface = pygame.Surface(screen.get_size())
     surface = surface.convert()
-    #drawGrid(surface)
     surface.fill((45,45,45))
 
     snake = Snake()
@@ -178,7 +184,6 @@ def main():
     myfont = pygame.font.SysFont("monospace", 16)
 
     time_elapsed = 0
-    snake_speed = snake.initial_snake_speed
     while True:
         time = clock.tick(FPS)
         snake.handle_keys()
@@ -186,16 +191,13 @@ def main():
         surface.fill((45,45,45))
 
         time_elapsed += time
-        if time_elapsed > snake_speed: #Set the pace that the snake moves at so that it can be sped up as the game prgresses
+        if time_elapsed > snake.snake_speed: #Set the pace that the snake moves at so that it can be sped up as the game prgresses
             
-            searchAlgo(snake, args)
+            searchAlgo(food, snake, args)
 
-            snake.move()
+            snake.move(score_board)
             #print(snake.positions)
             time_elapsed = 0
-            if snake.length ==1: #A very brute force way to reset the scoreboard after death. 
-                score_board.score = 0 
-                snake_speed = snake.initial_snake_speed
 
 
         if snake.get_head_position() == food.position:
@@ -203,13 +205,13 @@ def main():
                 snake.length+=1
             score_board.score+=1
             food.randomize_position(snake.positions)
-            snake_speed = math.ceil(snake_speed * 0.99)
+            snake.snake_speed = math.ceil(snake.snake_speed * 0.99)
 
         snake.draw(surface)
         food.draw(surface)
 
         screen.blit(surface, (0,0))
-        text = myfont.render('Score {0} '.format(score_board.score), 1, (255,255,255))
+        text = myfont.render('Score {0} {1}'.format(score_board.score, snake.snake_speed), 1, (255,255,255))
         screen.blit(text, (5, 10))
         pygame.display.update()
 

@@ -1,9 +1,11 @@
+from __future__ import annotations
 import pygame
 import sys
 import random
 import math
 import argparse
-
+import collections
+from typing import Protocol, Dict, List, Iterator, Tuple, TypeVar, Optional
 
 #Global Variables
 SCREEN_WIDTH = 480
@@ -20,7 +22,51 @@ RIGHT = (1,0)
 
 FPS = 60
 
+T = TypeVar('T')
+GRIDLOCATION = Tuple[int, int]
+LOCATION = TypeVar('LOCATION')
+
 GRID = []
+MOVE_QUEUE = []
+
+class Graph(Protocol):
+    def neighbors(self, id: LOCATION) -> List[LOCATION]: pass
+
+class Queue:
+    def __init__(self):
+        self.elements = collections.deque()
+    
+    def empty(self) -> bool:
+        return not self.elements
+    
+    def put(self, x: T):
+        self.elements.append(x)
+    
+    def get(self) -> T:
+        return self.elements.popleft()
+
+class SquareGrid:
+    def __init__(self, width: int, height: int):
+        self.width = width
+        self.height = height
+        self.walls: List[GRIDLOCATION] = []
+    
+    def in_bounds(self, id: GRIDLOCATION) -> bool:
+        (x, y) = id
+        return 0 <= x < self.width and 0 <= y < self.height
+    
+    def passable(self, id: GRIDLOCATION) -> bool:
+        return id not in self.walls
+    
+    def neighbors(self, id: GRIDLOCATION) -> Iterator[GRIDLOCATION]:
+        (x, y) = id
+        neighbors = [(x+1, y), (x-1, y), (x, y-1), (x, y+1)] # E W N S
+        # see "Ugly paths" section for an explanation:
+        if (x + y) % 2 == 0: neighbors.reverse() # S N W E
+        results = filter(self.in_bounds, neighbors)
+        results = filter(self.passable, results)
+        return results
+
 
 class Food(object):
     def __init__(self):
@@ -103,6 +149,57 @@ class Snake(object):
                 elif event.key == pygame.K_RIGHT:
                     self.turn(RIGHT)
 
+def breadth_first_search(graph: Graph, start: LOCATION, goal: LOCATION):
+    frontier = Queue()
+    frontier.put(start)
+    came_from: Dict[LOCATION, Optional[LOCATION]] = {}
+    came_from[start] = None
+    
+    while not frontier.empty():
+        current: LOCATION = frontier.get()
+        
+        if current == goal:
+            break
+        
+        for next in graph.neighbors(current):
+            if next not in came_from:
+                frontier.put(next)
+                came_from[next] = current
+    
+    return came_from
+
+def reconstruct_path(came_from: Dict[LOCATION, LOCATION], start: LOCATION, goal: LOCATION) -> List[LOCATION]:
+
+    current: LOCATION = goal
+    path: List[LOCATION] = []
+    while current != start: # note: this will fail if no path found
+        path.append(current)
+        current = came_from[current]
+    path.append(start) # optional
+    path.reverse() # optional
+    return path
+
+def convertToMovement(path):
+    moves = []
+    start = path[0]
+
+    for i in range(1, len(path), 1):
+        if path[i] == (start[0]+UP[1], start[1]+UP[0]):
+            moves.append('UP')
+            start = path[i]
+        elif path[i] == (start[0]+DOWN[1], start[1]+DOWN[0]):
+            moves.append('DOWN')
+            start = path[i]
+        elif path[i] == (start[0]+RIGHT[1], start[1]+RIGHT[0]):
+            moves.append('RIGHT')
+            start = path[i]
+        elif path[i] == (start[0]+LEFT[1], start[1]+LEFT[0]):
+            moves.append('LEFT')
+            start = path[i]
+
+
+    return moves
+
 class Score(object):
     def __init__(self):
         self.score = 0
@@ -147,15 +244,11 @@ def bruteForceSearch(snake):
         snake.turn(RIGHT)
     return snake 
 
-def bfs(snake, food):
-
-    return
-
 def searchAlgo(food, snake, args): #I need a guard in here against multiple seach algo flags being called
     if args.bruteForce:
         bruteForceSearch(snake)
     if args.bfs_search:
-        bfs(snake, food)
+        breadth_first_search(snake, food)
     return snake
 
 def generateGridCoordinates(): #generates all coordinate points on the grid board, this is used to generate the starting point. 

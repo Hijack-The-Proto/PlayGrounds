@@ -6,15 +6,18 @@ import random
 import math
 import argparse
 import collections
+import heapq
 from typing import Protocol, Dict, List, Iterator, Tuple, TypeVar, Optional
 
 #Global Variables
-SCREEN_WIDTH = 480
-SCREEN_HEIGHT = 480
 
 GRIDSIZE = 20
-GRID_WIDTH = SCREEN_WIDTH / GRIDSIZE
-GRID_HEIGHT = SCREEN_HEIGHT / GRIDSIZE
+
+GRID_WIDTH = 50
+GRID_HEIGHT = 24
+
+SCREEN_WIDTH = GRID_WIDTH * GRIDSIZE
+SCREEN_HEIGHT = GRID_HEIGHT * GRIDSIZE
 
 UP = (0,-1)
 DOWN = (0,1)
@@ -92,9 +95,9 @@ class Snake(object):
         self.rotation = [(0,0)]
         self.new_direction = self.direction
         self.color = (0, 128, 0)
-        self.initial_snake_speed = 250 # larger is slower
+        self.initial_snake_speed = 50 # larger is slower
         self.snake_speed = self.initial_snake_speed
-        self.max_length = 560 #FIX ME: make this variable depending on the amount of spaces on the board at the start of the game. 
+        self.max_length = int(GRID_WIDTH*GRID_HEIGHT)-15 #FIX ME: make this variable depending on the amount of spaces on the board at the start of the game. 
 
         self.head = (int(self.positions[0][0]/GRIDSIZE), int(self.positions[0][1]/GRIDSIZE))
         self.body = [self.head]
@@ -164,8 +167,28 @@ class Score(object):
     def __init__(self):
         self.score = 0
 
-def bfs_move(path, snake, score_board):
-    print(path)
+
+class PriorityQueue:
+    def __init__(self):
+        self.elements: List[Tuple[float, T]] = []
+    
+    def empty(self) -> bool:
+        return not self.elements
+    
+    def put(self, item: T, priority: float):
+        heapq.heappush(self.elements, (priority, item))
+    
+    def get(self) -> T:
+        return heapq.heappop(self.elements)[1]
+
+def heuristic(a: GRIDLOCATION, b: GRIDLOCATION):
+    (x1, y1) = a
+    (x2, y2) = b
+    num  = math.sqrt((abs(x1 - x2)**2) + (abs(y1 - y2)**2))
+    #print(num)
+    return num
+
+def search_move(path, snake, score_board):
     move = path[0]
     path.pop(0)
     snake.turn(move)
@@ -192,20 +215,44 @@ def breadth_first_search(graph: Graph, start: LOCATION, goal: LOCATION):
     print(came_from)
     return came_from
 
+def greedy_best_first_search(graph: Graph, start: LOCATION, goal: LOCATION):
+    frontier = PriorityQueue()
+    frontier.put(start, 0)
+    came_from: Dict[LOCATION, Optional[LOCATION]] = {}
+    came_from[start] = None
+    
+    while not frontier.empty():
+        current: LOCATION = frontier.get()
+        print(current)
+        
+        if current == goal:
+            break
+        
+        for next in graph.neighbors(current):
+            if next not in came_from:
+                priority = heuristic(goal, next)
+                frontier.put(next, priority)
+                came_from[next] = current
+    print('\ncame_from dump: \n')
+    print(came_from)
+    return came_from
+
+
 def reconstruct_path(came_from: Dict[LOCATION, LOCATION], start: LOCATION, goal: LOCATION) -> List[LOCATION]:
 
     current: LOCATION = goal
     path: List[LOCATION] = []
-    while current != start: # note: this will fail if no path found
-        try:
-            print(current)
-            path.append(current)
-            current = came_from[current]
-        except:
-            print('ERROR')
-            return 'bad'
-    path.append(start) # optional
-    path.reverse() # optional
+    if current not in came_from: # This checks to make sure a viable path was found. 
+        print('ERROR')
+        return 'bad'
+
+    while current != start:
+        print(current)
+        path.append(current)
+        current = came_from[current]
+        
+    path.append(start)
+    path.reverse() #reverse the list so we can read it out start to goal for the snake to follow.
     print('\npath dump: \n')
     print(path)
     return path
@@ -233,12 +280,15 @@ def convertToMovement(path):
 
     return moves
 
-def generate_bfs_moves(food, board, snake):
+def generate_moves(food, board, snake, args):
     snake.convert_nums()
     food_location = (int(food.position[0]/GRIDSIZE), int(food.position[1]/GRIDSIZE))
     board.walls = snake.body
     print('Food Location: {0} snake head {1}'.format(food_location, snake.head))
-    path = convertToMovement(reconstruct_path(breadth_first_search(board, snake.head, food_location), snake.head, food_location))
+    if args.bfs_search:
+        path = convertToMovement(reconstruct_path(breadth_first_search(board, snake.head, food_location), snake.head, food_location))
+    elif args.greedy_search:
+        path = convertToMovement(reconstruct_path(greedy_best_first_search(board, snake.head, food_location), snake.head, food_location))
     return path
 
 def drawGrid(surface): #draws a grip pattern on the background to help visualize the snakes rows and colemns 
@@ -255,6 +305,7 @@ def create_argument_parser():
     parser = argparse.ArgumentParser(description='Snake Game. Choose what Algorythem you would like to use, or choose nothing to play Snake yourself.')
     parser.add_argument('--brute-force', help='Solves snake using a brute force approach', action='store_true', dest='bruteForce', default=False)
     parser.add_argument('--bfs', help='Trys to solve snake by using a Bredth First Search approach', action='store_true', dest='bfs_search', default=False)
+    parser.add_argument('--greedy', help='Trys to solve snake by using a Greedy Best First Search approach', action='store_true', dest='greedy_search', default=False)
     return parser
 
 def bruteForceSearch(snake):
@@ -262,20 +313,20 @@ def bruteForceSearch(snake):
     #Using some hard coding of edges, will fix later using the GRIDSIZE global variables
 
     #This segment takes care of the base cases of movment. the snake shoudl zigzag down the screen while keeping the farthest left column open
-    if 460 == snake_head[0] and snake.direction != DOWN: #Checking snake.direction lets us know what our last move was, eleminating the need for any vairables to be passed to this function
+    if SCREEN_WIDTH-GRIDSIZE == snake_head[0] and snake.direction != DOWN: #Checking snake.direction lets us know what our last move was, eleminating the need for any vairables to be passed to this function
         snake.turn(DOWN)
     elif snake_head[0] > 20 and snake.direction != RIGHT:
         snake.turn(LEFT)
     if 20 == snake_head[0] and snake.direction != DOWN and snake_head[1] != 0.0: #This if check needed to ignore going down when the snake reached to top and turned right to begin the loop
         snake.turn(DOWN)
-    elif 1 < snake_head[0] < 460 and snake.direction != LEFT: # the 1 < here is to let the loop ignore any movement in the 0 column while the snake returns to the top of the board.
+    elif 1 < snake_head[0] < SCREEN_WIDTH-GRIDSIZE and snake.direction != LEFT: # the 1 < here is to let the loop ignore any movement in the 0 column while the snake returns to the top of the board.
         snake.turn(RIGHT)
 
     #These dictate the loop the snake takes. when the snake reaches the lewest left point in its zig zag, regardless of what row it started on, 
     #it will turn left to begin going up to restart the loop. 
-    if (20.0, 460.0) == snake_head:
+    if (20.0, SCREEN_HEIGHT-GRIDSIZE) == snake_head:
         snake.turn(LEFT)
-    elif (0.0, 460.0) == snake_head:
+    elif (0.0, SCREEN_HEIGHT-GRIDSIZE) == snake_head:
         snake.turn(UP)
     elif (0.0, 0.0) == snake_head:
         snake.turn(RIGHT)
@@ -309,8 +360,10 @@ def main():
 
     time_elapsed = 0
 
-    if args.bfs_search: # finds the initial path for bfs
-        MOVE_QUEUE = generate_bfs_moves(food, board, snake)
+    if args.bfs_search or args.greedy_search: # finds the initial path for bfs
+        MOVE_QUEUE = generate_moves(food, board, snake, args)
+    else:
+        MOVE_QUEUE = [(0,0)]
 
     while True:
         game_time = clock.tick(FPS)
@@ -322,10 +375,15 @@ def main():
             
             if args.bruteForce:
                 bruteForceSearch(snake)
+                snake.move(score_board)
             elif args.bfs_search:
-                if not MOVE_QUEUE:
-                    MOVE_QUEUE = generate_bfs_moves(food, board, snake)
-                bfs_move(MOVE_QUEUE, snake, score_board)
+                if not MOVE_QUEUE: #or len(MOVE_QUEUE) > 10:
+                    MOVE_QUEUE = generate_moves(food, board, snake, args)
+                search_move(MOVE_QUEUE, snake, score_board)
+            elif args.greedy_search:
+                if not MOVE_QUEUE: #or len(MOVE_QUEUE) > 10:
+                    MOVE_QUEUE = generate_moves(food, board, snake, args)
+                search_move(MOVE_QUEUE, snake, score_board)
             else:
                 snake.move(score_board)
             time_elapsed = 0
@@ -337,8 +395,8 @@ def main():
             score_board.score+=1
             food.randomize_position(snake.positions)
             snake.snake_speed = math.ceil(snake.snake_speed * 0.99)
-            if args.bfs_search:
-                MOVE_QUEUE = generate_bfs_moves(food, board, snake)
+            if args.bfs_search or args.greedy_search:
+                MOVE_QUEUE = generate_moves(food, board, snake, args)
 
         snake.draw(surface)
         food.draw(surface)
@@ -349,7 +407,7 @@ def main():
             pygame.display.update()
             time.sleep(10)
             snake.reset(score_board)
-            MOVE_QUEUE = generate_bfs_moves(food, board, snake)
+            MOVE_QUEUE = generate_moves(food, board, snake, args)
 
 
         screen.blit(surface, (0,0))

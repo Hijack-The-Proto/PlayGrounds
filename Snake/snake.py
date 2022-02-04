@@ -36,24 +36,15 @@ MOVE_QUEUE = []
 class Graph(Protocol):
     def neighbors(self, id: LOCATION) -> List[LOCATION]: pass
 
-class Queue:
-    def __init__(self):
-        self.elements = collections.deque()
-    
-    def empty(self) -> bool:
-        return not self.elements
-    
-    def put(self, x: T):
-        self.elements.append(x)
-    
-    def get(self) -> T:
-        return self.elements.popleft()
+class WeightedGraph(Graph):
+    def cost(self, from_id: LOCATION, to_id: LOCATION) -> float: pass
 
 class SquareGrid:
     def __init__(self, width: int, height: int):
         self.width = width
         self.height = height
         self.walls: List[GRIDLOCATION] = []
+        self.weights: Dict[GRIDLOCATION, float] = {}
     
     def in_bounds(self, id: GRIDLOCATION) -> bool:
         (x, y) = id
@@ -70,7 +61,31 @@ class SquareGrid:
         results = filter(self.in_bounds, neighbors)
         results = filter(self.passable, results)
         return results
+    def cost(self, from_node: GRIDLOCATION, to_node: GRIDLOCATION) -> float:
+        return self.weights.get(to_node, 1)
 
+
+'''
+class GridWithWeights(SquareGrid):
+    def __init__(self, width: int, height: int):
+        super().__init__(width, height)
+        self.weights: Dict[GRIDLOCATION, float] = {}
+    
+    def cost(self, from_node: GRIDLOCATION, to_node: GRIDLOCATION) -> float:
+        return self.weights.get(to_node, 1)
+'''
+class Queue:
+    def __init__(self):
+        self.elements = collections.deque()
+    
+    def empty(self) -> bool:
+        return not self.elements
+    
+    def put(self, x: T):
+        self.elements.append(x)
+    
+    def get(self) -> T:
+        return self.elements.popleft()
 
 class Food(object):
     def __init__(self):
@@ -181,7 +196,16 @@ class PriorityQueue:
     def get(self) -> T:
         return heapq.heappop(self.elements)[1]
 
-def heuristic(a: GRIDLOCATION, b: GRIDLOCATION):
+def heuristic(current: GRIDLOCATION, goal: GRIDLOCATION, start) -> float:
+
+    dx1 = current[0] - goal[0]
+    dy1 = current[1] - goal[1]
+    dx2 = start[0] - goal[0]
+    dy2 = start[1] - goal[1]
+    cross = abs(dx1*dy2 - dx2*dy1)
+    return cross*0.001
+
+def greedy_heuristic(a: GRIDLOCATION, b: GRIDLOCATION):
     (x1, y1) = a
     (x2, y2) = b
     num  = math.sqrt((abs(x1 - x2)**2) + (abs(y1 - y2)**2))
@@ -189,6 +213,8 @@ def heuristic(a: GRIDLOCATION, b: GRIDLOCATION):
     return num
 
 def search_move(path, snake, score_board):
+    if path == 'bad':
+        return
     move = path[0]
     path.pop(0)
     snake.turn(move)
@@ -211,8 +237,6 @@ def breadth_first_search(graph: Graph, start: LOCATION, goal: LOCATION):
             if next not in came_from:
                 frontier.put(next)
                 came_from[next] = current
-    print('\ncame_from dump: \n')
-    print(came_from)
     return came_from
 
 def greedy_best_first_search(graph: Graph, start: LOCATION, goal: LOCATION):
@@ -230,11 +254,40 @@ def greedy_best_first_search(graph: Graph, start: LOCATION, goal: LOCATION):
         
         for next in graph.neighbors(current):
             if next not in came_from:
-                priority = heuristic(goal, next)
+                priority = greedy_heuristic(goal, next)
                 frontier.put(next, priority)
                 came_from[next] = current
-    print('\ncame_from dump: \n')
-    print(came_from)
+    return came_from
+
+def a_star_search(graph: Graph, start: LOCATION, goal: LOCATION, snake):
+    frontier = PriorityQueue()
+    frontier.put(start, 0)
+    came_from: Dict[LOCATION, Optional[LOCATION]] = {}
+    cost_so_far: Dict[LOCATION, float] = {}
+    came_from[start] = None
+    cost_so_far[start] = 0
+    if snake.length > 100:
+        invert = True
+    else:
+        invert = False
+    
+    
+    while not frontier.empty():
+        current: LOCATION = frontier.get()
+        print(current)
+        
+        if current == goal:
+            break
+        
+        for next in graph.neighbors(current):
+            new_cost = cost_so_far[current] + graph.cost(current, next)
+            if next not in cost_so_far or new_cost < cost_so_far[next]:
+                cost_so_far[next] = new_cost
+                priority = new_cost + heuristic(next, goal, start)
+                if invert: frontier.put(next, priority*-1)
+                else: frontier.put(next, priority)
+                came_from[next] = current
+    
     return came_from
 
 
@@ -247,7 +300,6 @@ def reconstruct_path(came_from: Dict[LOCATION, LOCATION], start: LOCATION, goal:
         return 'bad'
 
     while current != start:
-        print(current)
         path.append(current)
         current = came_from[current]
         
@@ -289,6 +341,8 @@ def generate_moves(food, board, snake, args):
         path = convertToMovement(reconstruct_path(breadth_first_search(board, snake.head, food_location), snake.head, food_location))
     elif args.greedy_search:
         path = convertToMovement(reconstruct_path(greedy_best_first_search(board, snake.head, food_location), snake.head, food_location))
+    elif args.a_star:
+        path = convertToMovement(reconstruct_path(a_star_search(board, snake.head, food_location, snake), snake.head, food_location))
     return path
 
 def drawGrid(surface): #draws a grip pattern on the background to help visualize the snakes rows and colemns 
@@ -306,6 +360,7 @@ def create_argument_parser():
     parser.add_argument('--brute-force', help='Solves snake using a brute force approach', action='store_true', dest='bruteForce', default=False)
     parser.add_argument('--bfs', help='Trys to solve snake by using a Bredth First Search approach', action='store_true', dest='bfs_search', default=False)
     parser.add_argument('--greedy', help='Trys to solve snake by using a Greedy Best First Search approach', action='store_true', dest='greedy_search', default=False)
+    parser.add_argument('--a-star', help='Trys to solve snake by using the A* Search approach', action='store_true', dest='a_star', default=False)
     return parser
 
 def bruteForceSearch(snake):
@@ -360,7 +415,7 @@ def main():
 
     time_elapsed = 0
 
-    if args.bfs_search or args.greedy_search: # finds the initial path for bfs
+    if args.bfs_search or args.greedy_search or args.a_star: # finds the initial path for bfs
         MOVE_QUEUE = generate_moves(food, board, snake, args)
     else:
         MOVE_QUEUE = [(0,0)]
@@ -376,14 +431,13 @@ def main():
             if args.bruteForce:
                 bruteForceSearch(snake)
                 snake.move(score_board)
-            elif args.bfs_search:
+            elif args.bfs_search or args.greedy_search or args.a_star:
                 if not MOVE_QUEUE: #or len(MOVE_QUEUE) > 10:
                     MOVE_QUEUE = generate_moves(food, board, snake, args)
+                    print('CHECK')
                 search_move(MOVE_QUEUE, snake, score_board)
-            elif args.greedy_search:
-                if not MOVE_QUEUE: #or len(MOVE_QUEUE) > 10:
-                    MOVE_QUEUE = generate_moves(food, board, snake, args)
-                search_move(MOVE_QUEUE, snake, score_board)
+                if MOVE_QUEUE == 'bad':
+                    print('survive')
             else:
                 snake.move(score_board)
             time_elapsed = 0

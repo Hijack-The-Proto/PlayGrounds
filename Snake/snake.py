@@ -266,10 +266,7 @@ def a_star_search(graph: Graph, start: LOCATION, goal: LOCATION, snake):
     cost_so_far: Dict[LOCATION, float] = {}
     came_from[start] = None
     cost_so_far[start] = 0
-    if snake.length > 100:
-        invert = True
-    else:
-        invert = False
+    invert = False
     
     
     while not frontier.empty():
@@ -432,7 +429,7 @@ def main():
                 bruteForceSearch(snake)
                 snake.move(score_board)
             elif args.bfs_search or args.greedy_search or args.a_star:
-                if not MOVE_QUEUE: #or len(MOVE_QUEUE) > 10:
+                if not MOVE_QUEUE or len(MOVE_QUEUE) > 20:
                     MOVE_QUEUE = generate_moves(food, board, snake, args)
                     print('CHECK')
                 search_move(MOVE_QUEUE, snake, score_board)
